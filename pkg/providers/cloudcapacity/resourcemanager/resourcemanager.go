@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"math"
 
 	"github.com/go-logr/logr"
 	"github.com/luthermonson/go-proxmox"
@@ -62,6 +63,39 @@ type resourceManager struct {
 
 var _ ResourceManager = &resourceManager{}
 
+// applyOvercommit scales the CPU and memory resources in NodeSettings
+// by the given factors, enabling overcommitment on the Proxmox node.
+func applyOvercommit(ns *settings.NodeSettings, cpuFactor, memFactor float64) {
+    if cpuFactor <= 1.0 && memFactor <= 1.0 {
+        return
+    }
+
+    newNUMANodes := make(settings.NUMANodes, len(ns.NUMANodes))
+    for id, info := range ns.NUMANodes {
+        if cpuFactor > 1.0 {
+            cpus, err := cpuset.Parse(info.CPUs)
+            if err == nil {
+                list := cpus.List()
+                maxID := list[len(list)-1]
+                extra := int(float64(cpus.Size())*cpuFactor) - cpus.Size()
+                newIDs := make([]int, extra)
+                for i := range extra {
+                    newIDs[i] = maxID + 1 + i
+                }
+                info.CPUs = cpus.Union(cpuset.New(newIDs...)).String()
+            }
+        }
+
+        if memFactor > 1.0 {
+            info.MemSize = uint64(float64(info.MemSize) * memFactor)
+        }
+
+        newNUMANodes[id] = info
+    }
+
+    ns.NUMANodes = newNUMANodes
+}
+
 func NewResourceManager(ctx context.Context, cl *goproxmox.APIClient, region, zone string) (ResourceManager, error) {
 	log := log.FromContext(ctx).WithName("ResourceManager").WithValues("node", zone)
 
@@ -84,6 +118,17 @@ func NewResourceManager(ctx context.Context, cl *goproxmox.APIClient, region, zo
 	manager.nodeSettings, err = nodeSettingsFromCluster(ctx, cl, zone)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get node settings from VM: %w", err)
+	}
+
+	// Apply overcommit factors if configured. CPU Factor is rounded up to the closest integer.
+	cpuFactor := math.Ceil(opts.CPUOvercommitFactor)
+	memFactor := opts.MemOvercommitFactor
+	if cpuFactor > 1.0 || memFactor > 1.0 {
+		log.Info("Applying overcommit to node settings",
+			"cpuFactor", cpuFactor, "memFactor", memFactor,
+			"before", manager.nodeSettings)
+		applyOvercommit(&manager.nodeSettings, cpuFactor, memFactor)
+		log.Info("Node settings after overcommit", "numaNodes", manager.nodeSettings.NUMANodes)
 	}
 
 	if name := opts.NodeSettingFilePath; name != "" {
