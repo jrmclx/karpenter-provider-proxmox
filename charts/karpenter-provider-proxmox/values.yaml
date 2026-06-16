@@ -20,9 +20,9 @@ fullnameOverride: ""
 overcommit:
   # -- Enable overcommitment
   enabled: false
-  # -- CPU overcommitment multiplier (be wise)
-  cpuOvercommitFactor: 1
-  # -- Memory overcommitment multiplier (at your own risk)
+  # -- CPU overcommitment multiplier - use with caution (integer, e.g. 4 = 4× physical CPUs)
+  cpuOvercommitFactor: 4
+  # -- Memory overcommitment multiplier - increase at your own risk (decimal, e.g. 1.2 = physical RAM × 1.2 reported as schedulable)
   memOvercommitFactor: 1
 
 # -- Controller pods priorityClassName.
