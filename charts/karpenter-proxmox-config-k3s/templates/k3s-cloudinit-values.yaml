@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.cloudInitValues.name }}
+  namespace: {{ .Release.Namespace }}
+stringData:
+  k3sServerURL: {{ .Values.cloudInitValues.k3sServerURL | quote }}
+  k3sToken: {{ .Values.cloudInitValues.k3sToken | quote }}
+  sshUser: {{ .Values.cloudInitValues.sshUser | quote }}
+  {{- if .Values.cloudInitValues.sshPasswordHash }}
+  sshPasswordHash: {{ .Values.cloudInitValues.sshPasswordHash | quote }}
+  {{- end }}
+  {{- if .Values.cloudInitValues.sshKey }}
+  sshKey: {{ .Values.cloudInitValues.sshKey | quote }}
+  {{- end }}
+  {{- if .Values.cloudInitTemplate.installK3sAgent }}
+  k3sVersion: {{ .Values.cloudInitTemplate.k3sVersion | quote }}
+  {{- end }}

@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.cloudInitTemplate.name }}
+  namespace: {{ .Release.Namespace }}
+stringData:
+  network-config: |
+    network:
+      version: 2
+      ethernets:
+    {{`{{- range .Interfaces }}`}}
+        {{`{{ .Name }}`}}:
+          match:
+            macaddress: {{`{{ .MacAddr | lower | quote }}`}}
+          dhcp4: true
+          dhcp6: false
+    {{`{{- if ne .MTU 0 }}`}}
+          mtu: {{`{{ .MTU }}`}}
+    {{`{{- end }}`}}
+    {{`{{- end }}`}}
+  user-data: |
+    #cloud-config
+
+    package_update: false
+    package_upgrade: false
+
+    users:
+      - name: {{`{{ .Values.sshUser }}`}}
+        groups: sudo
+        sudo: ALL=(ALL) NOPASSWD:ALL
+        shell: /bin/bash
+        lock_passwd: false
+        {{- if .Values.cloudInitValues.sshPasswordHash }}
+        passwd: {{`{{ .Values.sshPasswordHash }}`}}
+        {{- end }}
+        {{- if .Values.cloudInitValues.sshKey }}
+        ssh_authorized_keys:
+          - {{`{{ .Values.sshKey }}`}}
+        {{- end }}
+    ssh_pwauth: true
+
+    write_files:
+      - path: /etc/rancher/k3s/config.yaml
+        owner: root:root
+        permissions: "0600"
+        content: |
+          server: {{`{{ .Values.k3sServerURL }}`}}
+          token: {{`{{ .Values.k3sToken }}`}}
+          kubelet-arg:
+            - "cloud-provider=external"
+            - "provider-id={{`{{ .Metadata.ProviderID }}`}}"
+            - "register-with-taints=karpenter.sh/unregistered:NoExecute"
+
+    runcmd:
+    {{- if .Values.cloudInitTemplate.resetMachineId }}
+      - rm -f /etc/machine-id /var/lib/dbus/machine-id
+      - systemd-machine-id-setup
+      - systemctl restart systemd-networkd
+    {{- end }}
+    {{- if .Values.cloudInitTemplate.installK3sAgent }}
+      - until getent hosts get.k3s.io >/dev/null 2>&1; do sleep 1; done
+      - curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="{{`{{ .Values.k3sVersion }}`}}" sh -s - agent
+    {{- else }}
+      - systemctl enable k3s-agent
+      - systemctl start k3s-agent
+    {{- end }}
+
+    final_message: "Node should now have joined the cluster after $UPTIME seconds."
