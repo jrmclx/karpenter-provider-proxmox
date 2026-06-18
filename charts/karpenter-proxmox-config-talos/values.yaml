@@ -1,0 +1,127 @@
+# Default values for karpenter-proxmox-config-talos.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# This chart generates configuration required by karpenter-Provider-Proxmox to scale a Talos cluster.
+# It creates the following Secrets:
+#   - Cloud-Init template: contains cloud config sections with placeholder/variables, referenced in ProxmoxNodeClass.Spec.metadataOptions.templatesRef
+#   - Cloud-Init values: values injected in the cloud-init template for rendering of a valid cloud-init configuration, referenced in ProxmoxNodeClass.Spec.metadataOptions.valuesRef
+
+cloudInitTemplate:
+  # -- Name of the Secret containing the Cloud-Init template. This name is required in ProxmoxNodeClass.Spec.metadataOptions.templatesRef
+  name: karpenter-talos-cloudinit-template
+
+  # -- Version of the Kubelet to install
+  kubeletVersion: "v1.36.0"
+
+  # -- Indicates if the installation disk should be wiped at installation time.
+  installWipe: true
+
+  # -- Disable default CNI (Flannel) to use another CNI (like Calico or Cilium).
+  # -- Setting this to 'true' will add 'cluster.network.cni.name: none' to the Talos configuration.
+  disableDefaultCni: false
+
+  # -- Disable Kube Proxy if CNI will replace it
+  # -- For Cilium, value must match the value of the kubeProxyReplacement argument
+  proxyDisabled: false
+
+
+cloudInitValues:
+  # -- Name of the Secret containing the Cloud-Init values. This name is required in ProxmoxNodeClass.Spec.metadataOptions.valuesRef
+  name: karpenter-talos-cloudinit-values
+
+  # -- Talos' machine.token (in worker.yaml) or trustdinfo.token (in secrets.yaml).
+  machineToken: ""
+
+  # -- Talos' machine.ca.crt (in worker.yaml) or certs.os.cert (in secrets.yaml).
+  machineCA: ""
+
+  # -- Talos' cluster.id (found in worker.yaml and secrets.yaml).
+  clusterID: ""
+
+  # -- Talos' cluster.secret (found in worker.yaml and secrets.yaml).
+  clusterSecret: ""
+
+  # -- URL of the existing Talos ControlPlane Endpoint.
+  # -- Talos' cluster.controlPlane.endpoint (found in worker.yaml and controlplane.yaml).
+  clusterEndpoint: "https://master.example.local:6443"
+
+  # -- Talos' cluster.clusterName (found in worker.yaml and controlplane.yaml).
+  clusterName: "talos-cluster"
+
+
+nodeTemplate:
+  # -- Name of your VM Template
+  talos-template:
+
+    # -- Create the VM Template Karpenter resource
+    enabled: true
+    
+    # -- ProxmoxTemplate or ProxmoxUnmanagedTemplate
+    kind: ProxmoxUnmanagedTemplate
+    
+    # -- Raw spec of Proxmox Node VM Template https://github.com/sergelogvinov/karpenter-provider-proxmox/blob/main/docs/nodetemplateclass.md
+    spec:
+      templateName: talos
+    
+    # -- (Optional) Tags to find the Proxmox template. If specified, all listed tags must be present on the template.
+    # tags:
+    #   - talos
+
+
+nodeClass:
+  # -- Name of your Node Class
+  talos-node:
+
+    # -- Create the Proxmox Node Class
+    enabled: true
+    
+    # -- Raw spec for ProxmoxNodeClass. Ref: https://github.com/sergelogvinov/karpenter-provider-proxmox/blob/main/docs/nodeclass.md
+    spec:
+      # The Proxmox virtual machine template reference (required)
+      instanceTemplateRef:
+        kind: ProxmoxUnmanagedTemplate
+        name: talos-template
+      
+      # Root device for the VM
+      bootDevice:
+        size: 20Gi
+        storage: vmdata
+
+      metadataOptions:
+        type: cdrom
+        templatesRef:
+          name: karpenter-talos-cloudinit-template
+          namespace: kube-system
+        valuesRef:
+          name: karpenter-talos-cloudinit-values
+          namespace: kube-system
+      
+      # -- (Optional) Tags to apply to the VM in the Proxmox dashboard
+      tags:
+        - karpenter
+        - talos
+
+
+nodePools:
+  # -- Name of your Node Pool
+  talos-worker:
+
+    # -- Create the Karpenter Node Pool
+    enabled: true
+  
+    # -- Raw spec of Node Pool. Ref: https://karpenter.sh/docs/concepts/nodepools
+    spec:
+      limits:
+        cpu: "48"
+        memory: 96Gi
+      template:
+        spec:
+          nodeClassRef:
+            group: karpenter.proxmox.sinextra.dev
+            kind: ProxmoxNodeClass
+            name: talos-node
+          requirements:
+            - key: "kubernetes.io/arch"
+              operator: In
+              values: ["amd64"]

@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.cloudInitTemplate.name }}
+  namespace: {{ .Release.Namespace }}
+stringData:
+  network-config: |
+    network:
+      version: 2
+      ethernets:
+    {{`{{- range .Interfaces }}`}}
+        {{`{{ .Name }}`}}:
+          match:
+            macaddress: {{`{{ .MacAddr | lower | quote }}`}}
+          dhcp4: true
+          dhcp6: false
+    {{`{{- if ne .MTU 0 }}`}}
+          mtu: {{`{{ .MTU }}`}}
+    {{`{{- end }}`}}
+    {{`{{- end }}`}}
+  user-data: |
+    version: v1alpha1
+    debug: false
+    persist: true
+    machine:
+      type: worker
+      token: {{`{{ .Values.machineToken }}`}}
+      ca:
+        crt: {{`{{ .Values.machineCA }}`}}
+      kubelet:
+      {{- if .Values.cloudInitTemplate.kubeletVersion }}
+        image: ghcr.io/siderolabs/kubelet:{{ .Values.cloudInitTemplate.kubeletVersion }}
+      {{- end }}
+        defaultRuntimeSeccompProfileEnabled: true
+        extraConfig:
+          {{`{{- .Kubernetes.KubeletConfiguration | toYamlPretty | nindent 6 }}`}}
+      install:
+        wipe: {{ .Values.cloudInitTemplate.installWipe }}
+      features:
+        rbac: true
+        stableHostname: true
+        apidCheckExtKeyUsage: true
+        diskQuotaSupport: true
+        kubePrism:
+          enabled: true
+          port: 7445
+        hostDNS:
+          enabled: true
+          forwardKubeDNSToHost: true
+    cluster:
+      id: {{`{{ .Values.clusterID }}`}}
+      secret: {{`{{ .Values.clusterSecret }}`}}
+      controlPlane:
+        endpoint: {{`{{ .Values.clusterEndpoint }}`}}
+      clusterName: {{`{{ .Values.clusterName }}`}}
+      network:
+      {{- if .Values.cloudInitTemplate.disableDefaultCni }}
+        cni:
+          name: none
+      {{- end }}
+        dnsDomain: cluster.local
+        podSubnets:
+          - 10.244.0.0/16
+        serviceSubnets:
+          - 10.96.0.0/12
+    {{- if .Values.cloudInitTemplate.proxyDisabled }}
+      proxy:
+        disabled: true
+    {{- end }}
+      token: {{`{{ .Kubernetes.BootstrapToken }}`}}
+      ca:
+        crt: {{`{{ .Kubernetes.RootCA | b64enc | quote }}`}}

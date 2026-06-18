@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.cloudInitValues.name }}
+  namespace: {{ .Release.Namespace }}
+stringData:
+  machineToken: {{ required "cloudInitValues.machineToken is required" .Values.cloudInitValues.machineToken | quote }}
+  machineCA: {{ required "cloudInitValues.machineCA is required" .Values.cloudInitValues.machineCA | quote }}
+  clusterID: {{ required "cloudInitValues.clusterID is required" .Values.cloudInitValues.clusterID | quote }}
+  clusterSecret: {{ required "cloudInitValues.clusterSecret is required" .Values.cloudInitValues.clusterSecret | quote }}
+  clusterEndpoint: {{ required "cloudInitValues.clusterEndpoint is required" .Values.cloudInitValues.clusterEndpoint | quote }}
+  clusterName: {{ required "cloudInitValues.clusterName is required" .Values.cloudInitValues.clusterName | quote }}
