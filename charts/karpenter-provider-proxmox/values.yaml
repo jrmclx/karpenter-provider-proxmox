@@ -16,6 +16,15 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+# -- CPU & Memory overcommitment (EXPERIMENTAL: introduced for testing purpose and homelab)
+overcommit:
+  # -- Enable overcommitment
+  enabled: false
+  # -- CPU overcommitment multiplier - use with caution (integer, e.g. 4 = 4× physical CPUs)
+  cpuOvercommitFactor: 4
+  # -- Memory overcommitment multiplier - increase at your own risk (decimal, e.g. 1.2 = physical RAM × 1.2 reported as schedulable)
+  memOvercommitFactor: 1
+
 # -- Controller pods priorityClassName.
 priorityClassName: system-cluster-critical
 

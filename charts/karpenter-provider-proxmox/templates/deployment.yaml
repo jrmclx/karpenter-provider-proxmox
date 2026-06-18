@@ -69,6 +69,12 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+          {{- if .Values.overcommit.enabled }}
+            - name: CPU_OVERCOMMIT_FACTOR
+              value: {{ .Values.overcommit.cpuOvercommitFactor | quote }}
+            - name: MEM_OVERCOMMIT_FACTOR
+              value: {{ .Values.overcommit.memOvercommitFactor | quote }}
+          {{- end }}
             - name: MEMORY_LIMIT
               valueFrom:
                 resourceFieldRef:

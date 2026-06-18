@@ -1,4 +1,36 @@
-# Karpenter Provider for Proxmox
+# 📋Karpenter Provider for Proxmox — Fork
+
+This repository is a fork of the upstream *Karpenter Provider for Proxmox* project: [sergelogvinov/karpenter-provider-proxmox](https://github.com/sergelogvinov/karpenter-provider-proxmox)
+
+The original README and installation instructions have been preserved below.
+Note that this fork **does not publish pre-built image** — you will need to build it yourself using the provided Dockerfile.
+
+## Motivation
+
+The upstream project evaluates available CPU and Memory resources based on allocation, with no support for overcommitment or oversubscription. While this approach makes sense in production environments, it prevents scaling operations from occurring once allocated virtual resources reach the host's physical capacity — regardless of actual usage. As a consequence, the solution is difficult or impossible to evaluate in test environments and home labs, where resources are limited and most workloads sit idle.
+
+This fork introduces the ability to overcommit resources for testing purposes by applying optional multipliers to CPU and Memory.
+
+Multipliers are exposed as Helm chart values. Overcommitment is **disabled by default** and must be explicitly enabled before the multipliers take effect.
+
+```yaml
+overcommit:
+  # -- Enable overcommitment
+  enabled: true
+  # -- CPU overcommitment multiplier (use with caution)
+  cpuOvercommitFactor: 6
+  # -- Memory overcommitment multiplier (at your own risk)
+  memOvercommitFactor: 1.2
+```
+
+- `cpuOvercommitFactor` : integer multiplier applied to available CPU — e.g. `6` means 6× the physical CPU count is reported as schedulable.
+- `memOvercommitFactor` : decimal multiplier applied to available memory — e.g. `1.2` means 20% more memory than physically available is reported as schedulable.
+
+> [!IMPORTANT]
+> Overcommitting memory can cause slowness and instability. Keep `memOvercommitFactor` at `1` unless you fully understand the implications and accept the associated risks.
+
+
+# 📘Karpenter Provider for Proxmox
 
 ## Overview
 
