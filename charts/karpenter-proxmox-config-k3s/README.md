@@ -25,7 +25,7 @@ When Karpenter provisions a new node, it clones the referenced Proxmox VM templa
 
 ## 1. The VM template
 
-The chart does **not** build the Proxmox VM template — that is a one-time, out-of-band step (see `scripts/create_k3s_ubuntu_template.sh` provided alongside this chart, or build it manually). The template only needs to be an Ubuntu/Debian cloud image with:
+The chart does **not** build the Proxmox VM template — that is a one-time, out-of-band step (see `scripts/build-ubuntu-k3s-template.sh` provided alongside this chart, or build it manually). The template only needs to be an Ubuntu/Debian cloud image with:
 
 - `qemu-guest-agent` installed (required for Proxmox to report the VM's IP/state)
 - `containerd`, `runc`, `curl`, `nfs-common` (or your CNI/CSI dependencies)
@@ -39,6 +39,24 @@ This chart supports two ways to get the K3s agent binary onto the node, controll
 **Strategy 1 — install via Cloud-Init at provisioning time** (`installK3sAgent: true`)
 The VM template does **not** contain K3s at all. The generated `user-data` downloads and installs the K3s agent on every boot, using the real server URL/token from the values Secret. Simple, but adds ~10-20s to node startup and requires outbound internet access from every node at boot time.
 
+You can build this template by running the provided script on a Proxmox Host with `--k3s-mode none` (the script's default), so the resulting image is a plain Ubuntu cloud image with no K3s installed at all:
+
+Example:
+```bash
+./scripts/build-ubuntu-k3s-template.sh \
+   -c noble \
+   -i 9000 \
+   -n ubuntu-noble-template \
+   -b vmbr1 \
+   -s storage-name \
+   -d 10G \
+   -t
+
+```
+`-t`/`--template` converts the resulting VM into a Proxmox template once the build completes.
+Set `cloudInitTemplate.installK3sAgent: true` in `values.yaml` to match.
+
+
 **Strategy 2 — pre-install via VM template first-boot script** (`installK3sAgent: false`, the default and recommended approach)
 The VM template installs the K3s agent **once**, at template-build time, using dummy values, and leaves the service disabled and stopped:
 
@@ -51,8 +69,40 @@ Two details matter here and are easy to get wrong:
 - **Use `--firstboot-command`, not `--run-command`.** `virt-customize --run-command` executes while the disk image is offline being customized — it has no network access, so `apt install` and `curl` silently fail or hang. `--firstboot-command` defers execution to the VM's actual first boot, when the network is up.
 - **Pass `K3S_URL` (even a dummy one).** Setting `K3S_URL` makes the K3s installer default its exec command to `agent` automatically — appending `agent` explicitly (`sh -s - agent`) is redundant once `K3S_URL` is set, though harmless. Without `K3S_URL` at all, the installer creates `k3s.service` (server mode) instead of `k3s-agent.service`.
 
-At provisioning time, Cloud-Init overwrites `/etc/rancher/k3s/config.yaml` with the real `server`, `token`, and `kubelet-arg` values, then starts the already-installed `k3s-agent` service — no internet download needed on every node boot.
+At provisioning time, Cloud-Init overwrites `/etc/rancher/k3s/config.yaml` with the real `server`, `token`, and `kubelet-arg` values, then starts the already-installed `k3s-agent` service.
 
+You can build this template by running the provided script on a Proxmox Host with `--k3s-mode agent` and no `--k3s-url`/`--k3s-token`, so the script installs the K3s agent with dummy join values, skips enabling/starting it, and leaves the real join configuration to Cloud-Init.
+
+Example:
+```bash
+./scripts/build-ubuntu-k3s-template.sh \
+   -c noble \
+   -i 9000 \
+   -n ubuntu-k3s-agent-template \
+   -b vmbr1 \
+   -s storage-name \
+   -d 10G \
+   -t \
+   -m agent
+
+```
+
+> **Bootstrapping a real cluster from the same script:** the script also supports building a **K3s server** node directly, with the service started immediately — useful to stand up the very first control-plane node this chart's workers will later join. Omit `-t` to keep it as a regular bootable VM rather than a template, and pass `--k3s-start`:
+>
+> ```bash
+> ./scripts/build-ubuntu-k3s-template.sh \
+>   -c noble \
+>   -i 9100 \
+>   -n k3s-master-01 \
+>   -b vmbr1 \
+>   -s storage-name \
+>   -d 20G \
+>   -m server \
+>   --k3s-token "$K3S_TOKEN" \
+>   --k3s-start
+> ```
+>
+> If `--k3s-token` is a secure-format token (`K10<ca-hash>::server:<password>`), only the `<password>` portion is honored by K3s when bootstrapping the very first server — see [K3s token docs](https://docs.k3s.io/cli/token). Pass a short-format token (just the password) directly if you want full control over the value, or omit `--k3s-token` entirely and let K3s generate one (retrieve it afterwards from `/var/lib/rancher/k3s/server/token` on the new server).
 ---
 
 ## 2. Cloud-Init template (`cloudInitTemplate`)
